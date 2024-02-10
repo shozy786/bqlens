@@ -18,6 +18,10 @@ def normalize(sql: str) -> str:
 
 def _strip_literals(tree: exp.Expression) -> exp.Expression:
     def replace(node: exp.Expression) -> exp.Expression:
+        if isinstance(node, exp.In) and node.expressions:
+            # dashboards generate IN lists of every length; they're all the same query
+            node.set("expressions", [exp.Placeholder()])
+            return node
         if isinstance(node, exp.Literal):
             return exp.Placeholder()
         return node

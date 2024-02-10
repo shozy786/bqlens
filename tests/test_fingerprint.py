@@ -19,5 +19,17 @@ def test_different_shapes_differ():
     assert fingerprint(a) != fingerprint(b)
 
 
+def test_in_lists_of_any_length_collapse():
+    a = "SELECT * FROM ds.orders WHERE status IN ('new', 'paid')"
+    b = "SELECT * FROM ds.orders WHERE status IN ('new', 'paid', 'refunded', 'void')"
+    assert fingerprint(a) == fingerprint(b)
+    assert "IN (?)" in normalize(a)
+
+
+def test_in_subquery_is_kept():
+    sql = "SELECT * FROM ds.orders WHERE user_id IN (SELECT id FROM ds.users WHERE vip)"
+    assert "SELECT id FROM ds.users" in normalize(sql)
+
+
 def test_normalize_output_is_readable():
     assert normalize("select a from ds.t where b = 1") == "SELECT a FROM ds.t WHERE b = ?"
