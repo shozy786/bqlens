@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+.pytest_cache/
+.coverage
+.DS_Store
+.idea/
+.vscode/
+
+# local job exports, may contain query text with customer data
+*.jobs.jsonl
+exports/
