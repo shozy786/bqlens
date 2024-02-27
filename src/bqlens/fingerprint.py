@@ -13,7 +13,10 @@ DIALECT = "bigquery"
 def normalize(sql: str) -> str:
     """Canonical text for ``sql``: formatting and comments dropped, literals replaced with ``?``."""
     statements = [s for s in sqlglot.parse(sql, read=DIALECT) if s is not None]
-    return ";\n".join(_strip_literals(s).sql(dialect=DIALECT, comments=False) for s in statements)
+    return ";\n".join(
+        _strip_literals(s).sql(dialect=DIALECT, comments=False, normalize_functions="upper")
+        for s in statements
+    )
 
 
 def _strip_literals(tree: exp.Expression) -> exp.Expression:
