@@ -1,0 +1,9 @@
+[
+  {"id": "acme-analytics.web.events", "partition_column": "event_date", "num_bytes": 2638827906662, "num_columns": 48},
+  {"id": "acme-analytics.web.sessions", "partition_column": "session_start", "clustering": ["country"], "num_bytes": 236223201280, "num_columns": 22},
+  {"id": "acme-analytics.web.raw_hits", "partition_column": "_PARTITIONTIME", "num_bytes": 5497558138880, "num_columns": 14},
+  {"id": "acme-analytics.crm.customers", "num_bytes": 12884901888, "num_columns": 31},
+  {"id": "acme-analytics.ga4.events_20240101", "num_bytes": 9663676416, "num_columns": 27},
+  {"id": "acme-analytics.ga4.events_20240102", "num_bytes": 9878424780, "num_columns": 27},
+  {"id": "acme-analytics.ga4.events_20240103", "num_bytes": 10200547328, "num_columns": 27}
+]
