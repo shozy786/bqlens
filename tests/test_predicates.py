@@ -29,6 +29,34 @@ def test_projection_columns_are_not_filters():
     assert shape.filters == []
 
 
+def test_filters_trace_through_ctes():
+    shape = analyze(
+        """
+        WITH recent AS (SELECT * FROM web.events),
+             named AS (SELECT r.event_date AS d, r.name FROM recent AS r)
+        SELECT name FROM named WHERE d = '2024-01-01'
+        """,
+        "acme",
+    )
+    assert shape.filters == [ColumnUse("acme.web.events", "event_date", "eq")]
+
+
+def test_filters_on_derived_columns_are_dropped():
+    shape = analyze(
+        "SELECT * FROM (SELECT DATE(ts) AS d FROM web.events) WHERE d = '2024-01-01'",
+        "acme",
+    )
+    assert shape.filters == []
+
+
+def test_qualified_star_passes_through():
+    shape = analyze(
+        "SELECT * FROM (SELECT e.*, u.email FROM web.events e JOIN crm.users u ON u.id = e.uid) WHERE event_date > '2024'",
+        "acme",
+    )
+    assert ColumnUse("acme.web.events", "event_date", "range") in shape.filters
+
+
 def test_filtered_columns_is_case_insensitive():
     shape = analyze("SELECT 1 FROM web.events WHERE Event_Date = '2024-01-01' AND name LIKE 'x%'", "acme")
     assert shape.filtered_columns("acme.web.events") == {"event_date", "name"}
