@@ -1,0 +1,35 @@
+import pytest
+
+from bqlens.catalog import Catalog
+from bqlens.predicates import analyze
+from bqlens.rules import check
+
+
+@pytest.fixture
+def catalog(fixtures):
+    return Catalog.from_json(fixtures / "tables.json")
+
+
+def findings(sql, catalog):
+    return {(f.rule, f.table) for f in check(analyze(sql, "acme-analytics"), catalog)}
+
+
+def test_missing_partition_filter(catalog):
+    assert findings("SELECT * FROM web.events WHERE user_id = 'u1'", catalog) >= {
+        ("missing-partition-filter", "acme-analytics.web.events")
+    }
+
+
+def test_partition_filter_present(catalog):
+    sql = "SELECT name FROM web.events WHERE event_date = '2024-01-01'"
+    assert ("missing-partition-filter", "acme-analytics.web.events") not in findings(sql, catalog)
+
+
+def test_partition_filter_through_cte(catalog):
+    sql = "WITH e AS (SELECT * FROM web.events) SELECT name FROM e WHERE event_date > '2024-01-01'"
+    assert ("missing-partition-filter", "acme-analytics.web.events") not in findings(sql, catalog)
+
+
+def test_unpartitioned_and_unknown_tables_are_ignored(catalog):
+    assert findings("SELECT id FROM crm.customers", catalog) == set()
+    assert findings("SELECT id FROM somewhere.unknown", catalog) == set()
