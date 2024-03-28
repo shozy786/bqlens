@@ -44,3 +44,21 @@ def test_select_star_on_wide_table(catalog):
 
 def test_select_star_on_unknown_table_still_flagged(catalog):
     assert ("select-star", "acme-analytics.ds.mystery") in findings("SELECT * FROM ds.mystery", catalog)
+
+
+def test_limit_on_unclustered_table(catalog):
+    assert ("limit-without-filter", "acme-analytics.crm.customers") in findings(
+        "SELECT * FROM crm.customers LIMIT 100", catalog
+    )
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT id FROM crm.customers WHERE country = 'PK' LIMIT 100",
+        "SELECT country, COUNT(*) FROM crm.customers GROUP BY 1 LIMIT 10",
+        "SELECT session_id FROM web.sessions LIMIT 10",  # clustered
+    ],
+)
+def test_limit_cases_that_are_fine(catalog, sql):
+    assert not any(rule == "limit-without-filter" for rule, _ in findings(sql, catalog))

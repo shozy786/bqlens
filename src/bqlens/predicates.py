@@ -36,6 +36,8 @@ class QueryShape:
     tables: set[str] = field(default_factory=set)
     filters: list[ColumnUse] = field(default_factory=list)
     star_tables: set[str] = field(default_factory=set)  # every column ends up in the output
+    has_limit: bool = False
+    aggregates: bool = False
 
     def filtered_columns(self, table: str) -> set[str]:
         return {f.column.lower() for f in self.filters if f.table == table}
@@ -53,6 +55,9 @@ def analyze(sql: str, default_project: str | None = None) -> QueryShape:
             # BigQuery prunes columns nobody consumes, so `SELECT *` inside a CTE is free unless
             # the star survives all the way to the outermost query
             shape.star_tables |= {table_id(t, default_project) for t in _star_sources(scopes[-1])}
+            root = scopes[-1].expression
+            shape.has_limit |= root.args.get("limit") is not None
+            shape.aggregates |= root.args.get("group") is not None or root.find(exp.AggFunc) is not None
     return shape
 
 

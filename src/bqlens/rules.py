@@ -59,3 +59,20 @@ def select_star(shape: QueryShape, catalog: Catalog) -> Iterator[Finding]:
             table_id,
             f"SELECT * reads {what}; storage is columnar and billed per column read, select only what you use",
         )
+
+
+@rule
+def limit_without_filter(shape: QueryShape, catalog: Catalog) -> Iterator[Finding]:
+    if not shape.has_limit or shape.filters or shape.aggregates:
+        return
+    for table_id in sorted(shape.tables):
+        table = catalog.get(table_id)
+        if table is not None and table.clustering:
+            continue  # on clustered tables BigQuery can stop reading blocks once the limit is met
+        yield Finding(
+            "limit-without-filter",
+            "medium",
+            table_id,
+            "LIMIT does not reduce bytes billed, the whole table is still read; "
+            "use the table preview or TABLESAMPLE SYSTEM to peek at data",
+        )
