@@ -60,3 +60,33 @@ def test_qualified_star_passes_through():
 def test_filtered_columns_is_case_insensitive():
     shape = analyze("SELECT 1 FROM web.events WHERE Event_Date = '2024-01-01' AND name LIKE 'x%'", "acme")
     assert shape.filtered_columns("acme.web.events") == {"event_date", "name"}
+
+
+def test_star_in_outer_query_reads_every_column():
+    shape = analyze("SELECT * FROM web.events WHERE event_date = '2024-01-01'", "acme")
+    assert shape.star_tables == {"acme.web.events"}
+
+
+def test_star_inside_cte_is_pruned():
+    shape = analyze("WITH e AS (SELECT * FROM web.events) SELECT name FROM e", "acme")
+    assert shape.star_tables == set()
+
+
+def test_star_chain_and_qualified_star():
+    shape = analyze(
+        """
+        WITH e AS (SELECT * FROM web.events)
+        SELECT e.*, u.email FROM e JOIN crm.users u ON u.id = e.uid
+        """,
+        "acme",
+    )
+    assert shape.star_tables == {"acme.web.events"}
+
+
+def test_star_except_is_deliberate():
+    assert analyze("SELECT * EXCEPT (payload) FROM web.events", "acme").star_tables == set()
+
+
+def test_star_in_union_branches():
+    shape = analyze("SELECT * FROM web.events UNION ALL SELECT * FROM web.events_archive", "acme")
+    assert shape.star_tables == {"acme.web.events", "acme.web.events_archive"}

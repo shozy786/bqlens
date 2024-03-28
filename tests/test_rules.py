@@ -33,3 +33,14 @@ def test_partition_filter_through_cte(catalog):
 def test_unpartitioned_and_unknown_tables_are_ignored(catalog):
     assert findings("SELECT id FROM crm.customers", catalog) == set()
     assert findings("SELECT id FROM somewhere.unknown", catalog) == set()
+
+
+def test_select_star_on_wide_table(catalog):
+    found = check(analyze("SELECT * FROM crm.customers WHERE id = 1", "acme-analytics"), catalog)
+    star = next(f for f in found if f.rule == "select-star")
+    assert star.table == "acme-analytics.crm.customers"
+    assert "31 columns" in star.message
+
+
+def test_select_star_on_unknown_table_still_flagged(catalog):
+    assert ("select-star", "acme-analytics.ds.mystery") in findings("SELECT * FROM ds.mystery", catalog)

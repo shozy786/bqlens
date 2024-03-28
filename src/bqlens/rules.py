@@ -43,3 +43,19 @@ def missing_partition_filter(shape: QueryShape, catalog: Catalog) -> Iterator[Fi
                 table_id,
                 f"no filter on partition column `{table.partition_column}`, every partition is scanned",
             )
+
+
+@rule
+def select_star(shape: QueryShape, catalog: Catalog) -> Iterator[Finding]:
+    for table_id in sorted(shape.star_tables):
+        table = catalog.get(table_id)
+        columns = table.num_columns if table else None
+        if columns is not None and columns <= 8:
+            continue  # narrow table, listing columns saves next to nothing
+        what = f"all {columns} columns" if columns else "every column"
+        yield Finding(
+            "select-star",
+            "medium",
+            table_id,
+            f"SELECT * reads {what}; storage is columnar and billed per column read, select only what you use",
+        )
