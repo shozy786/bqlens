@@ -72,7 +72,7 @@ def group_jobs(jobs: Iterable[Job]) -> list[QueryGroup]:
 
 
 def build(jobs: Iterable[Job], catalog: Catalog) -> Report:
-    jobs = list(jobs)
+    jobs = [j for j in jobs if j.billable]
     groups = group_jobs(jobs)
     for group in groups:
         group.findings = check(analyze(group.sample.query, group.sample.project), catalog)

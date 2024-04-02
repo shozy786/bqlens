@@ -23,6 +23,15 @@ class Job:
     parent_job_id: str | None = None
     project: str | None = None
 
+    @property
+    def billable(self) -> bool:
+        """Whether this job's bytes should be counted.
+
+        Cache hits cost nothing, and a SCRIPT job reports the sum of its child jobs,
+        which show up in the history on their own with the actual statement text.
+        """
+        return not self.cache_hit and self.statement_type != "SCRIPT"
+
     @classmethod
     def from_row(cls, row: Mapping[str, Any]) -> Job:
         """Build a job from a row using the column names of the JOBS views."""
