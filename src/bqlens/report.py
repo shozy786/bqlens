@@ -1,4 +1,4 @@
-"""Aggregate job history into cost groups, one per query shape."""
+"""Aggregate job history into cost groups, one per query shape, and attach findings."""
 
 from __future__ import annotations
 
@@ -7,8 +7,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from .catalog import Catalog
 from .fingerprint import fingerprint
 from .jobs import Job
+from .predicates import analyze
+from .rules import Finding, check
 
 TIB = 1024**4
 ON_DEMAND_USD_PER_TIB = 6.25
@@ -21,6 +24,7 @@ class QueryGroup:
     runs: int = 0
     bytes_billed: int = 0
     users: Counter[str] = field(default_factory=Counter)
+    findings: list[Finding] = field(default_factory=list)
     first_seen: datetime = field(init=False)
     last_seen: datetime = field(init=False)
 
@@ -45,6 +49,17 @@ class QueryGroup:
         return self.bytes_billed / TIB * ON_DEMAND_USD_PER_TIB
 
 
+@dataclass
+class Report:
+    groups: list[QueryGroup]
+    jobs: int
+    bytes_billed: int
+
+    @property
+    def cost_usd(self) -> float:
+        return self.bytes_billed / TIB * ON_DEMAND_USD_PER_TIB
+
+
 def group_jobs(jobs: Iterable[Job]) -> list[QueryGroup]:
     """Group jobs by fingerprint, most expensive group first."""
     groups: dict[str, QueryGroup] = {}
@@ -54,3 +69,11 @@ def group_jobs(jobs: Iterable[Job]) -> list[QueryGroup]:
             groups[fp] = QueryGroup(fp, sample=job)
         groups[fp].add(job)
     return sorted(groups.values(), key=lambda g: g.bytes_billed, reverse=True)
+
+
+def build(jobs: Iterable[Job], catalog: Catalog) -> Report:
+    jobs = list(jobs)
+    groups = group_jobs(jobs)
+    for group in groups:
+        group.findings = check(analyze(group.sample.query, group.sample.project), catalog)
+    return Report(groups, jobs=len(jobs), bytes_billed=sum(j.bytes_billed for j in jobs))
