@@ -1,7 +1,7 @@
 import pytest
 
-from bqlens.jobs import read_file
 from bqlens.catalog import Catalog
+from bqlens.jobs import read_file
 from bqlens.report import TIB, build, group_jobs
 
 

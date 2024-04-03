@@ -90,3 +90,20 @@ def test_star_except_is_deliberate():
 def test_star_in_union_branches():
     shape = analyze("SELECT * FROM web.events UNION ALL SELECT * FROM web.events_archive", "acme")
     assert shape.star_tables == {"acme.web.events", "acme.web.events_archive"}
+
+
+def test_unqualified_column_in_join_is_ambiguous():
+    shape = analyze("SELECT 1 FROM web.events e JOIN crm.users u ON u.id = e.uid WHERE event_date = '2024'", "acme")
+    assert ("acme.web.events", "event_date") not in {(f.table, f.column) for f in shape.filters}
+    assert ("acme.crm.users", "event_date") not in {(f.table, f.column) for f in shape.filters}
+
+
+def test_unnest_does_not_make_columns_ambiguous():
+    shape = analyze(
+        """
+        SELECT item.sku FROM web.orders, UNNEST(items) AS item, UNNEST(tags) AS tag
+        WHERE order_date = '2024-04-01' AND item.qty > 1 AND tag = 'gift'
+        """,
+        "acme",
+    )
+    assert shape.filters == [ColumnUse("acme.web.orders", "order_date", "eq")]

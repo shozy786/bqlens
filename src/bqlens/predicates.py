@@ -72,13 +72,25 @@ def _collect(scope: Scope, shape: QueryShape, default_project: str | None) -> No
             shape.tables.add(table_id(source, default_project))
 
     for column in scope.columns:
-        clause = column.find_ancestor(exp.Where, exp.Join, exp.Select)
-        if not isinstance(clause, (exp.Where, exp.Join)):
+        if not _in_filter(column):
             continue
         resolved = _resolve(scope, column)
         if resolved is not None:
             table, name = resolved
             shape.filters.append(ColumnUse(table_id(table, default_project), name, _kind(column)))
+
+
+def _in_filter(column: exp.Column) -> bool:
+    clause = column.find_ancestor(exp.Where, exp.Join, exp.Select)
+    if isinstance(clause, exp.Where):
+        return True
+    if isinstance(clause, exp.Join):
+        # JOIN ... ON counts, the joined expression itself (e.g. UNNEST(items)) does not
+        node = column
+        while node.parent is not clause:
+            node = node.parent
+        return node.arg_key == "on"
+    return False
 
 
 def _resolve(scope: Scope, column: exp.Column, depth: int = 0) -> tuple[exp.Table, str] | None:
@@ -143,8 +155,13 @@ def _source_of(scope: Scope, column: exp.Column) -> exp.Expression | Scope | Non
     if column.table:
         return scope.sources.get(column.table)
     # scope.sources also lists every CTE in the WITH clause; only FROM/JOIN sources count here
-    selected = list(scope.selected_sources.values())
-    return selected[0][1] if selected else None
+    selected = scope.selected_sources
+    if column.name in selected and isinstance(selected[column.name][0], exp.Unnest):
+        return None  # UNNEST(tags) AS tag ... WHERE tag = 'x'
+    # UNNEST'd structs are almost always referenced qualified, so they don't make a column
+    # ambiguous. Two real sources do, and without a schema guessing would misattribute it.
+    candidates = [source for node, source in selected.values() if not isinstance(node, exp.Unnest)]
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def _kind(column: exp.Column) -> str:
