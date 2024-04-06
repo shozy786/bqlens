@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from .catalog import Catalog
+from .clustering import ClusteringAdvice, recommend
 from .fingerprint import fingerprint
 from .jobs import Job
 from .predicates import analyze
@@ -54,6 +55,7 @@ class Report:
     groups: list[QueryGroup]
     jobs: int
     bytes_billed: int
+    clustering: list[ClusteringAdvice] = field(default_factory=list)
 
     @property
     def cost_usd(self) -> float:
@@ -74,6 +76,14 @@ def group_jobs(jobs: Iterable[Job]) -> list[QueryGroup]:
 def build(jobs: Iterable[Job], catalog: Catalog) -> Report:
     jobs = [j for j in jobs if j.billable]
     groups = group_jobs(jobs)
+    usage = []
     for group in groups:
-        group.findings = check(analyze(group.sample.query, group.sample.project), catalog)
-    return Report(groups, jobs=len(jobs), bytes_billed=sum(j.bytes_billed for j in jobs))
+        shape = analyze(group.sample.query, group.sample.project)
+        group.findings = check(shape, catalog)
+        usage.append((shape, group.bytes_billed))
+    return Report(
+        groups,
+        jobs=len(jobs),
+        bytes_billed=sum(j.bytes_billed for j in jobs),
+        clustering=recommend(usage, catalog),
+    )
