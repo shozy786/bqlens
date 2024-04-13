@@ -9,6 +9,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+JOBS_SQL = """
+SELECT job_id, creation_time, user_email, project_id, query, statement_type, cache_hit,
+       total_bytes_processed, total_bytes_billed, parent_job_id
+FROM `{project}`.`region-{region}`.INFORMATION_SCHEMA.JOBS_BY_PROJECT
+WHERE creation_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days:d} DAY)
+  AND job_type = 'QUERY'
+  AND state = 'DONE'
+  AND error_result IS NULL
+"""
+
 
 @dataclass(frozen=True, slots=True)
 class Job:
@@ -78,3 +88,13 @@ def read_file(path: str | Path) -> Iterator[Job]:
             rows = (json.loads(line) for line in fh if line.strip())
         for row in rows:
             yield Job.from_row(row)
+
+
+def fetch(client: Any, project: str, region: str, days: int = 30) -> Iterator[Job]:
+    """Pull query jobs from ``INFORMATION_SCHEMA.JOBS_BY_PROJECT`` with a ``bigquery.Client``.
+
+    Needs ``bigquery.resourceViewer`` (or ``bigquery.jobs.listAll``) on the project.
+    """
+    sql = JOBS_SQL.format(project=project, region=region.lower(), days=days)
+    for row in client.query(sql).result():
+        yield Job.from_row(dict(row.items()))

@@ -3,7 +3,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-from bqlens.jobs import Job, read_file
+from bqlens.jobs import Job, fetch, read_file
+
+from .stubs import StubClient
 
 
 def test_reads_jsonl(fixtures):
@@ -30,3 +32,11 @@ def test_reads_json_array(tmp_path, fixtures):
 def test_timestamp_formats(value):
     job = Job.from_row({"job_id": "x", "creation_time": value})
     assert job.created == datetime(2024, 2, 5, 8, 0, 12, tzinfo=timezone.utc)
+
+
+def test_fetch_from_information_schema():
+    client = StubClient([{"job_id": "j1", "creation_time": "2024-04-01T00:00:00Z", "total_bytes_billed": 10}])
+    (job,) = fetch(client, "acme", "US", days=7)
+    assert job.bytes_billed == 10
+    assert "`acme`.`region-us`.INFORMATION_SCHEMA.JOBS_BY_PROJECT" in client.queries[0]
+    assert "INTERVAL 7 DAY" in client.queries[0]
