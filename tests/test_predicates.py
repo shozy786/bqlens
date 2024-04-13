@@ -17,8 +17,8 @@ def test_where_and_join_columns_are_filters():
         "acme",
     )
     assert set(shape.filters) == {
-        ColumnUse("acme.crm.users", "id", "eq"),
-        ColumnUse("acme.web.events", "user_id", "eq"),
+        ColumnUse("acme.crm.users", "id", "other"),
+        ColumnUse("acme.web.events", "user_id", "other"),
         ColumnUse("acme.web.events", "event_date", "range"),
         ColumnUse("acme.crm.users", "country", "eq"),
     }
@@ -107,3 +107,8 @@ def test_unnest_does_not_make_columns_ambiguous():
         "acme",
     )
     assert shape.filters == [ColumnUse("acme.web.orders", "order_date", "eq")]
+
+
+def test_comparisons_against_other_columns_cannot_prune():
+    shape = analyze("SELECT 1 FROM web.sessions WHERE DATE(session_start) = d AND country IN (SELECT c FROM x)", "acme")
+    assert {(f.column, f.kind) for f in shape.filters} == {("session_start", "other"), ("d", "other"), ("country", "other")}

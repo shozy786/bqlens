@@ -165,9 +165,13 @@ def _source_of(scope: Scope, column: exp.Column) -> exp.Expression | Scope | Non
 
 
 def _kind(column: exp.Column) -> str:
-    node = column.parent
+    child, node = column, column.parent
     while node is not None and not isinstance(node, (exp.Where, exp.Join, exp.Select)):
-        if type(node) in _KINDS:
-            return _KINDS[type(node)]
-        node = node.parent
+        kind = _KINDS.get(type(node))
+        if kind is not None:
+            # column-to-column comparisons (join keys, script variables, IN subqueries)
+            # are only known at run time and can't prune blocks
+            others = (e for e in node.iter_expressions() if e is not child)
+            return "other" if any(e.find(exp.Column) for e in others) else kind
+        child, node = node, node.parent
     return "other"

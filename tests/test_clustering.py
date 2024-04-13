@@ -55,8 +55,8 @@ def test_small_tables_are_skipped(catalog):
 def test_join_bytes_are_split_by_table_size(catalog):
     sql = """
         SELECT 1 FROM web.events e JOIN crm.users u ON u.id = e.user_id
-        WHERE e.event_date = '2024' AND u.country = 'PK'
+        WHERE e.event_date = '2024' AND e.event_name = 'login' AND u.country = 'PK'
     """
     (events,) = recommend(usage((sql, 100 * GIB)), catalog)
-    assert events.suggested == ("user_id",)
+    assert events.suggested == ("event_name",)  # join keys don't prune
     assert events.bytes_total == pytest.approx(100 * GIB * 2000 / 2000.5, rel=1e-6)
