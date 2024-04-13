@@ -47,11 +47,20 @@ def to_console(report: Report, console: Console, top: int = 15) -> None:
     console.print(table)
 
     flagged = [(i, g) for i, g in enumerate(groups, 1) if g.findings]
-    if not flagged:
-        return
-    console.print("\n[bold]Findings[/]")
+    if flagged:
+        console.print("\n[bold]Findings[/]")
     for i, g in flagged:
         console.print(f"\n[bold]#{i}[/] [dim]{g.fingerprint} · sample job {g.sample.job_id}[/]")
         for f in g.findings:
             where = f" [cyan]{f.table}[/]" if f.table else ""
             console.print(f"  [{_SEVERITY_STYLE[f.severity]}]{f.rule}[/]{where}: {f.message}")
+
+    if report.clustering:
+        console.print("\n[bold]Clustering[/]")
+    for advice in report.clustering:
+        current = ", ".join(advice.current) or "none"
+        console.print(
+            f"\n  [cyan]{advice.table}[/] (currently: {current})\n"
+            f"  CLUSTER BY [bold]{', '.join(advice.suggested)}[/] would help "
+            f"{advice.coverage:.0%} of the {fmt_bytes(advice.bytes_total)} read from it"
+        )

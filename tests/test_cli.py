@@ -13,3 +13,4 @@ def test_analyze_end_to_end(fixtures):
     assert "9 jobs" in result.output
     assert "missing-partition-filter" in result.output
     assert "acme-analytics.web.events" in result.output
+    assert "CLUSTER BY user_id, event_name" in result.output
