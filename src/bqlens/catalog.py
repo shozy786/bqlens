@@ -43,7 +43,21 @@ class Catalog:
         self._tables = {t.id: t for t in tables}
 
     def get(self, table_id: str) -> Table | None:
-        return self._tables.get(table_id)
+        if not table_id.endswith("*"):
+            return self._tables.get(table_id)
+        # a wildcard reads every matching shard; describe it as one big unpartitioned table
+        shards = self.matching(table_id)
+        if not shards:
+            return None
+        return Table(
+            id=table_id,
+            num_bytes=sum(t.num_bytes for t in shards),
+            num_columns=max((t.num_columns or 0 for t in shards), default=None) or None,
+        )
+
+    def matching(self, wildcard: str) -> list[Table]:
+        prefix = wildcard.rstrip("*")
+        return [t for t in self._tables.values() if t.id.startswith(prefix)]
 
     def __iter__(self) -> Iterator[Table]:
         return iter(self._tables.values())

@@ -30,3 +30,13 @@ def test_from_bigquery():
     assert catalog.get("p.web.events").partition_column == "event_date"
     assert catalog.get("p.web.sessions").clustering == ("a", "b")
     assert catalog.get("p.web.sessions").num_bytes == 0
+
+
+def test_wildcard_lookup(fixtures):
+    catalog = Catalog.from_json(fixtures / "tables.json")
+    shards = catalog.get("acme-analytics.ga4.events_*")
+    assert shards.num_bytes == 9663676416 + 9878424780 + 10200547328
+    assert shards.num_columns == 27
+    assert not shards.partitioned
+    assert len(catalog.matching("acme-analytics.ga4.events_2024010*")) == 3
+    assert catalog.get("acme-analytics.ga4.sessions_*") is None

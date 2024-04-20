@@ -62,3 +62,14 @@ def test_limit_on_unclustered_table(catalog):
 )
 def test_limit_cases_that_are_fine(catalog, sql):
     assert not any(rule == "limit-without-filter" for rule, _ in findings(sql, catalog))
+
+
+def test_wildcard_without_table_suffix(catalog):
+    found = check(analyze("SELECT event_name FROM `acme-analytics.ga4.events_*`", "acme-analytics"), catalog)
+    (wildcard,) = [f for f in found if f.rule == "unbounded-wildcard"]
+    assert "all 3 tables" in wildcard.message
+
+
+def test_wildcard_with_table_suffix(catalog):
+    sql = "SELECT event_name FROM `acme-analytics.ga4.events_*` WHERE _TABLE_SUFFIX BETWEEN '20240101' AND '20240102'"
+    assert not any(rule == "unbounded-wildcard" for rule, _ in findings(sql, catalog))

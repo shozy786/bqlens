@@ -46,6 +46,22 @@ def missing_partition_filter(shape: QueryShape, catalog: Catalog) -> Iterator[Fi
 
 
 @rule
+def unbounded_wildcard(shape: QueryShape, catalog: Catalog) -> Iterator[Finding]:
+    for table_id in sorted(t for t in shape.tables if t.endswith("*")):
+        if "_table_suffix" in shape.filtered_columns(table_id):
+            continue
+        shards = catalog.matching(table_id)
+        what = f"all {len(shards)} tables" if shards else "every table"
+        yield Finding(
+            "unbounded-wildcard",
+            "high",
+            table_id,
+            f"wildcard query reads {what} matching `{table_id.rsplit('.', 1)[-1]}`; "
+            "filter on _TABLE_SUFFIX to read only the shards you need",
+        )
+
+
+@rule
 def select_star(shape: QueryShape, catalog: Catalog) -> Iterator[Finding]:
     for table_id in sorted(shape.star_tables):
         table = catalog.get(table_id)
