@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,14 +16,20 @@ SELECT
   MAX(IF(c.is_partitioning_column = 'YES', c.column_name, NULL)) AS partition_column,
   ARRAY_AGG(IF(c.clustering_ordinal_position IS NULL, NULL, c.column_name)
             IGNORE NULLS ORDER BY c.clustering_ordinal_position) AS clustering,
-  ANY_VALUE(s.total_logical_bytes) AS num_bytes
+  ANY_VALUE(s.total_logical_bytes) AS num_bytes,
+  ANY_VALUE(t.ddl) AS ddl
 FROM `{project}`.`region-{region}`.INFORMATION_SCHEMA.COLUMNS AS c
+JOIN `{project}`.`region-{region}`.INFORMATION_SCHEMA.TABLES AS t
+  USING (table_catalog, table_schema, table_name)
 LEFT JOIN `{project}`.`region-{region}`.INFORMATION_SCHEMA.TABLE_STORAGE AS s
   ON s.project_id = c.table_catalog
  AND s.table_schema = c.table_schema
  AND s.table_name = c.table_name
 GROUP BY id
 """
+
+# ingestion-time partitioning has no real column, so COLUMNS can't tell us about it
+_INGESTION_TIME_DDL = re.compile(r"PARTITION BY\s+(?:DATE\(\s*)?_PARTITION(?:TIME|DATE)", re.IGNORECASE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,9 +85,12 @@ class Catalog:
 
 
 def _table(row: dict[str, Any]) -> Table:
+    partition_column = row.get("partition_column")
+    if partition_column is None and _INGESTION_TIME_DDL.search(row.get("ddl") or ""):
+        partition_column = "_PARTITIONTIME"
     return Table(
         id=row["id"],
-        partition_column=row.get("partition_column"),
+        partition_column=partition_column,
         clustering=tuple(row.get("clustering") or ()),
         num_bytes=int(row.get("num_bytes") or 0),
         num_columns=row.get("num_columns"),

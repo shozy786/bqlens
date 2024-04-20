@@ -40,3 +40,9 @@ def test_wildcard_lookup(fixtures):
     assert not shards.partitioned
     assert len(catalog.matching("acme-analytics.ga4.events_2024010*")) == 3
     assert catalog.get("acme-analytics.ga4.sessions_*") is None
+
+
+def test_ingestion_time_partitioning_from_ddl():
+    ddl = "CREATE TABLE `p.web.raw_hits`\n(\n  payload STRING\n)\nPARTITION BY DATE(_PARTITIONTIME);"
+    client = StubClient([{"id": "p.web.raw_hits", "num_columns": 1, "partition_column": None, "ddl": ddl}])
+    assert Catalog.from_bigquery(client, "p", "us").get("p.web.raw_hits").partition_column == "_PARTITIONTIME"

@@ -32,6 +32,8 @@ def check(shape: QueryShape, catalog: Catalog) -> list[Finding]:
 
 # truncating to the partition granularity keeps pruning intact; most other functions don't
 _PRUNE_SAFE = {"DATE", "DATE_TRUNC", "TIMESTAMP_TRUNC", "DATETIME_TRUNC"}
+# ingestion-time partitioned tables can be pruned through either pseudo-column
+_INGESTION_TIME = {"_partitiontime", "_partitiondate"}
 
 
 @rule
@@ -41,7 +43,8 @@ def partition_filter(shape: QueryShape, catalog: Catalog) -> Iterator[Finding]:
         if table is None or not table.partitioned:
             continue
         column = table.partition_column
-        uses = [f for f in shape.filters if f.table == table_id and f.column.lower() == column.lower()]
+        names = _INGESTION_TIME if column.lower() in _INGESTION_TIME else {column.lower()}
+        uses = [f for f in shape.filters if f.table == table_id and f.column.lower() in names]
         if not uses:
             yield Finding(
                 "missing-partition-filter",

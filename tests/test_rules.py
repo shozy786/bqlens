@@ -89,3 +89,15 @@ def test_wrapped_partition_filter(catalog, where, expected):
     found = findings(f"SELECT name FROM web.events WHERE {where}", catalog)
     assert (("wrapped-partition-filter", "acme-analytics.web.events") in found) is expected
     assert ("missing-partition-filter", "acme-analytics.web.events") not in found
+
+
+@pytest.mark.parametrize("pseudo", ["_PARTITIONTIME", "_PARTITIONDATE"])
+def test_ingestion_time_pseudo_columns_count(catalog, pseudo):
+    sql = f"SELECT payload FROM web.raw_hits WHERE {pseudo} >= '2024-04-01'"
+    assert not any(rule.endswith("partition-filter") for rule, _ in findings(sql, catalog))
+
+
+def test_ingestion_time_without_filter(catalog):
+    assert ("missing-partition-filter", "acme-analytics.web.raw_hits") in findings(
+        "SELECT payload FROM web.raw_hits WHERE payload LIKE '%x%'", catalog
+    )
