@@ -29,6 +29,7 @@ class ColumnUse:
     table: str
     column: str
     kind: str  # eq | range | like | other
+    wrapped: str | None = None  # outermost function applied to the column, e.g. "FORMAT_DATE"
 
 
 @dataclass
@@ -77,7 +78,7 @@ def _collect(scope: Scope, shape: QueryShape, default_project: str | None) -> No
         resolved = _resolve(scope, column)
         if resolved is not None:
             table, name = resolved
-            shape.filters.append(ColumnUse(table_id(table, default_project), name, _kind(column)))
+            shape.filters.append(ColumnUse(table_id(table, default_project), name, *_classify(column)))
 
 
 def _in_filter(column: exp.Column) -> bool:
@@ -164,7 +165,9 @@ def _source_of(scope: Scope, column: exp.Column) -> exp.Expression | Scope | Non
     return candidates[0] if len(candidates) == 1 else None
 
 
-def _kind(column: exp.Column) -> str:
+def _classify(column: exp.Column) -> tuple[str, str | None]:
+    """How ``column`` is compared, and the function wrapped around it on the way, if any."""
+    wrapped = None
     child, node = column, column.parent
     while node is not None and not isinstance(node, (exp.Where, exp.Join, exp.Select)):
         kind = _KINDS.get(type(node))
@@ -172,6 +175,9 @@ def _kind(column: exp.Column) -> str:
             # column-to-column comparisons (join keys, script variables, IN subqueries)
             # are only known at run time and can't prune blocks
             others = (e for e in node.iter_expressions() if e is not child)
-            return "other" if any(e.find(exp.Column) for e in others) else kind
+            return ("other" if any(e.find(exp.Column) for e in others) else kind), wrapped
+        if isinstance(node, exp.Func):
+            # name it the way the user wrote it; sqlglot's class names are dialect-neutral
+            wrapped = node.sql(dialect=DIALECT).split("(", 1)[0].upper()
         child, node = node, node.parent
-    return "other"
+    return "other", wrapped

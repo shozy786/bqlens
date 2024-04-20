@@ -73,3 +73,19 @@ def test_wildcard_without_table_suffix(catalog):
 def test_wildcard_with_table_suffix(catalog):
     sql = "SELECT event_name FROM `acme-analytics.ga4.events_*` WHERE _TABLE_SUFFIX BETWEEN '20240101' AND '20240102'"
     assert not any(rule == "unbounded-wildcard" for rule, _ in findings(sql, catalog))
+
+
+@pytest.mark.parametrize(
+    "where, expected",
+    [
+        ("FORMAT_DATE('%Y%m', event_date) = '202401'", True),
+        ("CAST(event_date AS STRING) LIKE '2024-01%'", True),
+        ("DATE_TRUNC(event_date, MONTH) = '2024-01-01'", False),
+        ("event_date = '2024-01-01'", False),
+        ("CAST(event_date AS STRING) = '2024-01-01' OR event_date = '2024-01-02'", False),
+    ],
+)
+def test_wrapped_partition_filter(catalog, where, expected):
+    found = findings(f"SELECT name FROM web.events WHERE {where}", catalog)
+    assert (("wrapped-partition-filter", "acme-analytics.web.events") in found) is expected
+    assert ("missing-partition-filter", "acme-analytics.web.events") not in found

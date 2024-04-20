@@ -30,18 +30,32 @@ def check(shape: QueryShape, catalog: Catalog) -> list[Finding]:
     return [finding for r in RULES for finding in r(shape, catalog)]
 
 
+# truncating to the partition granularity keeps pruning intact; most other functions don't
+_PRUNE_SAFE = {"DATE", "DATE_TRUNC", "TIMESTAMP_TRUNC", "DATETIME_TRUNC"}
+
+
 @rule
-def missing_partition_filter(shape: QueryShape, catalog: Catalog) -> Iterator[Finding]:
+def partition_filter(shape: QueryShape, catalog: Catalog) -> Iterator[Finding]:
     for table_id in sorted(shape.tables):
         table = catalog.get(table_id)
         if table is None or not table.partitioned:
             continue
-        if table.partition_column.lower() not in shape.filtered_columns(table_id):
+        column = table.partition_column
+        uses = [f for f in shape.filters if f.table == table_id and f.column.lower() == column.lower()]
+        if not uses:
             yield Finding(
                 "missing-partition-filter",
                 "high",
                 table_id,
-                f"no filter on partition column `{table.partition_column}`, every partition is scanned",
+                f"no filter on partition column `{column}`, every partition is scanned",
+            )
+        elif all(u.wrapped and u.wrapped not in _PRUNE_SAFE for u in uses):
+            yield Finding(
+                "wrapped-partition-filter",
+                "medium",
+                table_id,
+                f"partition column `{column}` is only filtered through {uses[0].wrapped}(), which can stop "
+                f"BigQuery from pruning partitions; compare the bare column against a constant instead",
             )
 
 

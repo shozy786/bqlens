@@ -112,3 +112,13 @@ def test_unnest_does_not_make_columns_ambiguous():
 def test_comparisons_against_other_columns_cannot_prune():
     shape = analyze("SELECT 1 FROM web.sessions WHERE DATE(session_start) = d AND country IN (SELECT c FROM x)", "acme")
     assert {(f.column, f.kind) for f in shape.filters} == {("session_start", "other"), ("d", "other"), ("country", "other")}
+
+
+def test_wrapping_function_is_recorded():
+    shape = analyze(
+        "SELECT 1 FROM web.events WHERE FORMAT_DATE('%Y%m', event_date) = '202401' AND name = 'x'", "acme"
+    )
+    assert {(f.column, f.kind, f.wrapped) for f in shape.filters} == {
+        ("event_date", "eq", "FORMAT_DATE"),
+        ("name", "eq", None),
+    }
