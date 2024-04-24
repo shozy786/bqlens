@@ -11,10 +11,13 @@ from rich.console import Console
 from . import __version__
 from .catalog import Catalog
 from .jobs import fetch, read_file
+from .predicates import analyze as analyze_sql
 from .render import to_console, to_dict, to_markdown
 from .report import Report, build
+from .rules import check
 
 _existing_file = click.Path(exists=True, dir_okay=False)
+_SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3, "never": 99}
 
 
 def _output_options(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -66,3 +69,30 @@ def scan(project: str, region: str, days: int, fmt: str, top: int) -> None:
     client = bigquery.Client(project=project)
     catalog = Catalog.from_bigquery(client, project, region)
     _emit(build(fetch(client, project, region, days), catalog), fmt, top)
+
+
+@main.command()
+@click.argument("files", nargs=-1, type=_existing_file)
+@click.option("--catalog", "catalog_file", type=_existing_file, help="Table metadata as JSON.")
+@click.option("--project", help="Project that dataset.table references belong to.")
+@click.option(
+    "--fail-on",
+    type=click.Choice(["low", "medium", "high", "never"]),
+    default="high",
+    show_default=True,
+    help="Exit non-zero when a finding at this severity or above is found.",
+)
+def lint(files: tuple[str, ...], catalog_file: str | None, project: str | None, fail_on: str) -> None:
+    """Check SQL files (or stdin) before they ever run.
+
+    Point it at compiled dbt models in CI: bqlens lint target/compiled/**/*.sql
+    """
+    catalog = Catalog.from_json(catalog_file) if catalog_file else Catalog()
+    sources = [(f, open(f).read()) for f in files] or [("<stdin>", click.get_text_stream("stdin").read())]
+    worst = 0
+    for name, sql in sources:
+        for f in check(analyze_sql(sql, project), catalog):
+            worst = max(worst, _SEVERITY_RANK[f.severity])
+            click.echo(f"{name}: {f.severity} {f.rule} {f.table or ''}: {f.message}")
+    if worst >= _SEVERITY_RANK[fail_on]:
+        raise SystemExit(1)
