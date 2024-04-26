@@ -29,7 +29,7 @@ def one_line(sql: str, width: int = 80) -> str:
 def to_console(report: Report, console: Console, top: int = 15) -> None:
     console.print(
         f"[bold]{report.jobs}[/] jobs, [bold]{fmt_bytes(report.bytes_billed)}[/] billed, "
-        f"about [bold]${report.cost_usd:,.2f}[/] at on-demand rates\n"
+        f"about [bold]${report.cost_usd:,.2f}[/] at ${report.usd_per_tib:g}/TiB\n"
     )
 
     table = Table(show_lines=False, header_style="bold")
@@ -73,6 +73,7 @@ def to_dict(report: Report, top: int | None = None) -> dict[str, Any]:
         "jobs": report.jobs,
         "bytes_billed": report.bytes_billed,
         "cost_usd": round(report.cost_usd, 2),
+        "usd_per_tib": report.usd_per_tib,
         "groups": [
             {
                 "fingerprint": g.fingerprint,
@@ -108,7 +109,7 @@ def to_markdown(report: Report, top: int = 15) -> str:
     """A report that pastes cleanly into a GitHub issue, Jira ticket or Confluence page."""
     lines = [
         f"**{report.jobs}** jobs, **{fmt_bytes(report.bytes_billed)}** billed, "
-        f"about **${report.cost_usd:,.2f}** at on-demand rates",
+        f"about **${report.cost_usd:,.2f}** at ${report.usd_per_tib:g}/TiB",
         "",
         "| # | cost | runs | per run | query | findings |",
         "|--:|-----:|-----:|--------:|-------|----------|",

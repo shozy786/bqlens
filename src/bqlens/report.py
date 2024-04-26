@@ -26,6 +26,7 @@ class QueryGroup:
     bytes_billed: int = 0
     users: Counter[str] = field(default_factory=Counter)
     findings: list[Finding] = field(default_factory=list)
+    usd_per_tib: float = ON_DEMAND_USD_PER_TIB
     first_seen: datetime = field(init=False)
     last_seen: datetime = field(init=False)
 
@@ -47,7 +48,7 @@ class QueryGroup:
 
     @property
     def cost_usd(self) -> float:
-        return self.bytes_billed / TIB * ON_DEMAND_USD_PER_TIB
+        return self.bytes_billed / TIB * self.usd_per_tib
 
 
 @dataclass
@@ -56,26 +57,27 @@ class Report:
     jobs: int
     bytes_billed: int
     clustering: list[ClusteringAdvice] = field(default_factory=list)
+    usd_per_tib: float = ON_DEMAND_USD_PER_TIB
 
     @property
     def cost_usd(self) -> float:
-        return self.bytes_billed / TIB * ON_DEMAND_USD_PER_TIB
+        return self.bytes_billed / TIB * self.usd_per_tib
 
 
-def group_jobs(jobs: Iterable[Job]) -> list[QueryGroup]:
+def group_jobs(jobs: Iterable[Job], usd_per_tib: float = ON_DEMAND_USD_PER_TIB) -> list[QueryGroup]:
     """Group jobs by fingerprint, most expensive group first."""
     groups: dict[str, QueryGroup] = {}
     for job in jobs:
         fp = fingerprint(job.query)
         if fp not in groups:
-            groups[fp] = QueryGroup(fp, sample=job)
+            groups[fp] = QueryGroup(fp, sample=job, usd_per_tib=usd_per_tib)
         groups[fp].add(job)
     return sorted(groups.values(), key=lambda g: g.bytes_billed, reverse=True)
 
 
-def build(jobs: Iterable[Job], catalog: Catalog) -> Report:
+def build(jobs: Iterable[Job], catalog: Catalog, usd_per_tib: float = ON_DEMAND_USD_PER_TIB) -> Report:
     jobs = [j for j in jobs if j.billable]
-    groups = group_jobs(jobs)
+    groups = group_jobs(jobs, usd_per_tib)
     usage = []
     for group in groups:
         shape = analyze(group.sample.query, group.sample.project)
@@ -86,4 +88,5 @@ def build(jobs: Iterable[Job], catalog: Catalog) -> Report:
         jobs=len(jobs),
         bytes_billed=sum(j.bytes_billed for j in jobs),
         clustering=recommend(usage, catalog),
+        usd_per_tib=usd_per_tib,
     )

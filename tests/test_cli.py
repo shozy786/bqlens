@@ -69,3 +69,9 @@ def test_lint_reads_stdin(fixtures):
     )
     assert result.exit_code == 1
     assert "<stdin>: medium limit-without-filter" in result.output
+
+
+def test_custom_price(run):
+    data = json.loads(run("--format", "json", "--usd-per-tib", "8.13"))
+    assert data["usd_per_tib"] == 8.13
+    assert data["groups"][0]["cost_usd"] == pytest.approx(39.04, abs=0.01)
