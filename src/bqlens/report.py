@@ -15,7 +15,12 @@ from .predicates import analyze
 from .rules import Finding, check
 
 TIB = 1024**4
+GIB = 1024**3
 ON_DEMAND_USD_PER_TIB = 6.25
+
+# a query re-reading this much this often is usually a dashboard that should hit a smaller table
+REPEAT_MIN_RUNS_PER_DAY = 12
+REPEAT_MIN_BYTES = 10 * GIB
 
 
 @dataclass
@@ -45,6 +50,11 @@ class QueryGroup:
     @property
     def avg_bytes(self) -> int:
         return self.bytes_billed // max(self.runs, 1)
+
+    @property
+    def runs_per_day(self) -> float:
+        days = (self.last_seen - self.first_seen).total_seconds() / 86400
+        return self.runs / max(days, 1.0)
 
     @property
     def cost_usd(self) -> float:
@@ -82,6 +92,8 @@ def build(jobs: Iterable[Job], catalog: Catalog, usd_per_tib: float = ON_DEMAND_
     for group in groups:
         shape = analyze(group.sample.query, group.sample.project)
         group.findings = check(shape, catalog)
+        if (finding := repeated_scan(group)) is not None:
+            group.findings.append(finding)
         usage.append((shape, group.bytes_billed))
     return Report(
         groups,
@@ -89,4 +101,17 @@ def build(jobs: Iterable[Job], catalog: Catalog, usd_per_tib: float = ON_DEMAND_
         bytes_billed=sum(j.bytes_billed for j in jobs),
         clustering=recommend(usage, catalog),
         usd_per_tib=usd_per_tib,
+    )
+
+
+def repeated_scan(group: QueryGroup) -> Finding | None:
+    if group.runs_per_day < REPEAT_MIN_RUNS_PER_DAY or group.avg_bytes < REPEAT_MIN_BYTES:
+        return None
+    return Finding(
+        "repeated-scan",
+        "medium",
+        None,
+        f"ran {group.runs} times (~{group.runs_per_day:.0f}/day) reading {group.avg_bytes / GIB:,.0f} GiB "
+        "each time; if the source changes less often than that, materialize the result "
+        "(scheduled table or materialized view) and query that instead",
     )
