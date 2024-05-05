@@ -122,3 +122,8 @@ def test_wrapping_function_is_recorded():
         ("event_date", "eq", "FORMAT_DATE"),
         ("name", "eq", None),
     }
+
+
+def test_unparseable_sql_gives_empty_shape():
+    shape = analyze("SELECT a FROM WHERE b = 1", "acme")
+    assert shape.tables == set() and shape.filters == []

@@ -33,3 +33,9 @@ def test_in_subquery_is_kept():
 
 def test_normalize_output_is_readable():
     assert normalize("select a from ds.t where b = 1") == "SELECT a FROM ds.t WHERE b = ?"
+
+
+def test_unparseable_sql_falls_back_to_text():
+    sql = "SELECT a FROM WHERE   b = 1"
+    assert normalize(sql) == "SELECT a FROM WHERE b = 1"
+    assert fingerprint(sql) == fingerprint("SELECT a FROM\nWHERE b = 1")

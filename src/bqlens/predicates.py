@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 import sqlglot
 from sqlglot import exp
+from sqlglot.errors import SqlglotError
 from sqlglot.optimizer.scope import Scope, traverse_scope
 
 from .fingerprint import DIALECT
@@ -46,7 +47,11 @@ class QueryShape:
 
 def analyze(sql: str, default_project: str | None = None) -> QueryShape:
     shape = QueryShape()
-    for statement in sqlglot.parse(sql, read=DIALECT):
+    try:
+        statements = sqlglot.parse(sql, read=DIALECT)
+    except SqlglotError:
+        return shape  # nothing to say about a query we can't read; it still shows up by cost
+    for statement in statements:
         if statement is None:
             continue
         scopes = traverse_scope(statement)

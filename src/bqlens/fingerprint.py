@@ -6,13 +6,21 @@ import hashlib
 
 import sqlglot
 from sqlglot import exp
+from sqlglot.errors import SqlglotError
 
 DIALECT = "bigquery"
 
 
 def normalize(sql: str) -> str:
-    """Canonical text for ``sql``: formatting and comments dropped, literals replaced with ``?``."""
-    statements = [s for s in sqlglot.parse(sql, read=DIALECT) if s is not None]
+    """Canonical text for ``sql``: formatting and comments dropped, literals replaced with ``?``.
+
+    Statements sqlglot can't parse (procedural scripts, new syntax) fall back to their text with
+    whitespace collapsed, so they still group with exact reruns instead of breaking the report.
+    """
+    try:
+        statements = [s for s in sqlglot.parse(sql, read=DIALECT) if s is not None]
+    except SqlglotError:
+        return " ".join(sql.split())
     return ";\n".join(
         _strip_literals(s).sql(dialect=DIALECT, comments=False, normalize_functions="upper")
         for s in statements
