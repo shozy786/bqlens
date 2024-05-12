@@ -1,4 +1,4 @@
-from bqlens.catalog import Catalog
+from bqlens.catalog import Catalog, Table
 
 from .stubs import StubClient
 
@@ -46,3 +46,11 @@ def test_ingestion_time_partitioning_from_ddl():
     ddl = "CREATE TABLE `p.web.raw_hits`\n(\n  payload STRING\n)\nPARTITION BY DATE(_PARTITIONTIME);"
     client = StubClient([{"id": "p.web.raw_hits", "num_columns": 1, "partition_column": None, "ddl": ddl}])
     assert Catalog.from_bigquery(client, "p", "us").get("p.web.raw_hits").partition_column == "_PARTITIONTIME"
+
+
+def test_dataset_qualified_lookup():
+    catalog = Catalog([Table("p1.web.events"), Table("p1.crm.users"), Table("p2.crm.users"), Table("p1.ga4.events_1")])
+    assert catalog.get("web.events").id == "p1.web.events"
+    assert catalog.get("crm.users") is None  # two projects have one
+    assert catalog.get("web.nope") is None
+    assert [t.id for t in catalog.matching("ga4.events_*")] == ["p1.ga4.events_1"]

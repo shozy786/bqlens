@@ -48,9 +48,20 @@ class Table:
 class Catalog:
     def __init__(self, tables: Iterable[Table] = ()) -> None:
         self._tables = {t.id: t for t in tables}
+        self._by_dataset: dict[str, list[Table]] = {}
+        for t in self._tables.values():
+            self._by_dataset.setdefault(_without_project(t.id), []).append(t)
 
     def get(self, table_id: str) -> Table | None:
+        """Look up ``project.dataset.table``, or ``dataset.table`` when exactly one project has it.
+
+        Exports made without ``project_id`` leave unqualified references with no project to pin
+        them to; guessing between two projects' tables would attach the wrong metadata.
+        """
         if not table_id.endswith("*"):
+            if table_id.count(".") == 1:
+                candidates = self._by_dataset.get(table_id, [])
+                return candidates[0] if len(candidates) == 1 else None
             return self._tables.get(table_id)
         # a wildcard reads every matching shard; describe it as one big unpartitioned table
         shards = self.matching(table_id)
@@ -64,6 +75,8 @@ class Catalog:
 
     def matching(self, wildcard: str) -> list[Table]:
         prefix = wildcard.rstrip("*")
+        if prefix.count(".") == 1:
+            return [t for t in self._tables.values() if _without_project(t.id).startswith(prefix)]
         return [t for t in self._tables.values() if t.id.startswith(prefix)]
 
     def __iter__(self) -> Iterator[Table]:
@@ -82,6 +95,10 @@ class Catalog:
         """Read partitioning, clustering and sizes for every table in a project region."""
         rows = client.query(CATALOG_SQL.format(project=project, region=region.lower())).result()
         return cls(_table(dict(row.items())) for row in rows)
+
+
+def _without_project(table_id: str) -> str:
+    return table_id.split(".", 1)[-1]
 
 
 def _table(row: dict[str, Any]) -> Table:
