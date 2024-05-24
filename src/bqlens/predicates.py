@@ -57,7 +57,9 @@ def analyze(sql: str, default_project: str | None = None) -> QueryShape:
         scopes = traverse_scope(statement)
         for scope in scopes:
             _collect(scope, shape, default_project)
-        if scopes:
+        if isinstance(statement, (exp.Delete, exp.Update, exp.Merge)):
+            _collect_dml_target(statement, shape, default_project)
+        elif scopes:
             # BigQuery prunes columns nobody consumes, so `SELECT *` inside a CTE is free unless
             # the star survives all the way to the outermost query
             shape.star_tables |= {table_id(t, default_project) for t in _star_sources(scopes[-1])}
@@ -70,6 +72,29 @@ def analyze(sql: str, default_project: str | None = None) -> QueryShape:
 def table_id(table: exp.Table, default_project: str | None = None) -> str:
     parts = (table.catalog or default_project, table.db, table.name)
     return ".".join(p for p in parts if p)
+
+
+def _collect_dml_target(statement: exp.Expression, shape: QueryShape, default_project: str | None) -> None:
+    """DELETE, UPDATE and MERGE scan the table they modify, and only their own condition prunes it.
+
+    These are where unbounded scans hurt the most: a nightly MERGE without the partition column
+    in its ON clause rereads the whole target every run.
+    """
+    target = statement.this
+    if not isinstance(target, exp.Table):
+        return
+    target_id = table_id(target, default_project)
+    shape.tables.add(target_id)
+    merge = isinstance(statement, exp.Merge)
+    condition = statement.args.get("on" if merge else "where")
+    if condition is None:
+        return
+    for column in condition.find_all(exp.Column):
+        if column.find_ancestor(exp.Select) is not None:
+            continue  # inside a subquery, belongs to whatever that reads
+        # in MERGE ... ON an unqualified column could come from either side
+        if column.table == target.alias_or_name or (not column.table and not merge):
+            shape.filters.append(ColumnUse(target_id, column.name, *_classify(column)))
 
 
 def _collect(scope: Scope, shape: QueryShape, default_project: str | None) -> None:

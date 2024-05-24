@@ -101,3 +101,29 @@ def test_ingestion_time_without_filter(catalog):
     assert ("missing-partition-filter", "acme-analytics.web.raw_hits") in findings(
         "SELECT payload FROM web.raw_hits WHERE payload LIKE '%x%'", catalog
     )
+
+
+@pytest.mark.parametrize(
+    "sql, flagged",
+    [
+        ("DELETE FROM web.events WHERE user_id = 'u_1'", True),
+        ("DELETE FROM web.events WHERE event_date < '2023-01-01'", False),
+        ("UPDATE web.events e SET e.country = 'PK' WHERE e.user_id IN (SELECT id FROM crm.customers)", True),
+        ("UPDATE web.events SET country = 'PK' WHERE event_date = '2024-05-01' AND country = 'pk'", False),
+        (
+            "MERGE web.events T USING (SELECT * FROM staging.events) S ON T.event_id = S.event_id "
+            "WHEN MATCHED THEN UPDATE SET name = S.name WHEN NOT MATCHED THEN INSERT ROW",
+            True,
+        ),
+        (
+            "MERGE web.events T USING (SELECT * FROM staging.events) S "
+            "ON T.event_id = S.event_id AND T.event_date >= '2024-05-01' "
+            "WHEN MATCHED THEN UPDATE SET name = S.name",
+            False,
+        ),
+    ],
+)
+def test_dml_targets_need_partition_filters(catalog, sql, flagged):
+    found = findings(sql, catalog)
+    assert (("missing-partition-filter", "acme-analytics.web.events") in found) is flagged
+    assert not any(rule == "select-star" for rule, _ in found)
