@@ -1,0 +1,6 @@
+- id: bqlens-lint
+  name: bqlens lint
+  description: Catch full-table scans in BigQuery SQL before they ship
+  entry: bqlens lint
+  language: python
+  types: [sql]

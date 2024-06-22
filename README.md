@@ -93,7 +93,16 @@ bqlens lint --catalog tables.json --project acme-analytics target/compiled/**/*.
 ```
 
 Exits 1 when it finds anything at `--fail-on` severity or above (default `high`), so it can
-gate compiled dbt models in CI. Reads stdin when no files are given.
+gate compiled dbt models in CI. Reads stdin when no files are given. There's also a
+[pre-commit](https://pre-commit.com) hook:
+
+```yaml
+- repo: https://github.com/shozy786/bqlens
+  rev: v0.3.0
+  hooks:
+    - id: bqlens-lint
+      args: [--catalog, tables.json, --project, acme-analytics]
+```
 
 ### Output
 
@@ -105,11 +114,12 @@ for cost figures; the default is the US on-demand rate.
 
 | rule | severity | |
 |---|---|---|
-| `missing-partition-filter` | high | Partitioned table read with no predicate on the partition column |
+| `missing-partition-filter` | high | Partitioned table read with no predicate on the partition column, including the target of a DELETE, UPDATE or MERGE |
 | `wrapped-partition-filter` | medium | Partition column only filtered through a function like `FORMAT_DATE()` or `CAST()`, which can stop pruning |
 | `unbounded-wildcard` | high | `dataset.events_*` read without a `_TABLE_SUFFIX` filter |
 | `select-star` | medium | `SELECT *` on a wide table that survives to the final output (a `*` inside a CTE is free if the outer query picks columns) |
 | `limit-without-filter` | medium | `LIMIT` used to make a query cheap on an unclustered table; it doesn't |
+| `repeated-scan` | medium | An expensive query rerunning more than ~12 times a day; usually a dashboard that should read a materialized result |
 
 Filters are traced through CTEs and subqueries the way BigQuery pushes them down, so
 `WITH e AS (SELECT * FROM events) SELECT ... FROM e WHERE event_date = ...` counts as a partition

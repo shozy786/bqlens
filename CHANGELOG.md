@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 (2024-06-22)
+
+- DELETE, UPDATE and MERGE targets are checked for partition filters; for MERGE the
+  target's partition column has to appear in the ON clause
+- pre-commit hook (`bqlens-lint`)
+
 ## 0.2.0 (2024-05-12)
 
 - `lint` command for checking SQL files (or stdin) in CI, with `--fail-on`
